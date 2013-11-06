@@ -1,8 +1,9 @@
 # go-vhost
-go-vhost is a simple library that lets you implement virtual hosting functionality for differen protocols. HTTP and TLS are supported so far. go-vhost functions extract the routing information and return an object implementing net.Conn which works as if no bytes had been consumed.
+go-vhost is a simple library that lets you implement virtual hosting functionality for different protocols (HTTP and TLS so far). go-vhost functions extract the routing information and return an object implementing net.Conn which works as if no bytes had been consumed.
 
-### Demonstration
-Some code demonstrations illustrate the library's capabilities best:
+### [API Documentation](https://godoc.org/github.com/inconshreveable/go-vhost)
+
+### Usage
 
     import vhost "github.com/inconshreveable/go-vhost"
 
@@ -26,7 +27,7 @@ Some code demonstrations illustrate the library's capabilities best:
     // ...
 
 
-Or how about a reverse proxy server:
+#### The start of a reverse proxy server:
 
     import vhost "github.com/inconshreveable/go-vhost"
 
@@ -48,7 +49,7 @@ Or how about a reverse proxy server:
 
 
 ### Advanced introspection
-The entire HTTP/TLS request is available for inspection in case you want to mux on something besides the Host header:
+The entire HTTP request headers are available for inspection in case you want to mux on something besides the Host header:
 
     // parse out the HTTP request and the Host header
     if vhostConn, err = vhost.HTTP(conn); err != nil {
@@ -59,17 +60,17 @@ The entire HTTP/TLS request is available for inspection in case you want to mux 
     customRouting := vhost.Request.Header["X-Custom-Routing-Header"]
 
 
-You can look at detailed information about ClientHello message with TLS connections:
+Likewise for TLS, you can look at detailed information about the ClientHello message:
 
     if vhostConn, err = vhost.TLS(conn); err != nil {
         panic("Not a valid TLS connection!")
     }
 
     cipherSuites := vhost.ClientHelloMsg.CipherSuites
-	sessionId := vhost.ClientHelloMsg.SessionId
+    sessionId := vhost.ClientHelloMsg.SessionId
 
 
-#### Memory reduction with Free
+##### Memory reduction with Free
 After you're done muxing, you probably don't need to inspect the header data anymore, so you can make it available for garbage collection:
 
     // look up the upstream host
