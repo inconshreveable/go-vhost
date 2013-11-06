@@ -8,9 +8,11 @@ import (
 
 type HTTPConn struct {
 	*sharedConn
-	*http.Request
+	Request *http.Request
 }
 
+// HTTP parses the head of the first HTTP request on conn and returns
+// a new, unread connection with metadata for virtual host muxing
 func HTTP(conn net.Conn) (httpConn *HTTPConn, err error) {
 	c, rd := newShared(conn)
 

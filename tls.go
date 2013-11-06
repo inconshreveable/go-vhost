@@ -79,9 +79,11 @@ const (
 // It implements the net.Conn interface.
 type TLSConn struct {
 	*sharedConn
-	*ClientHelloMsg
+	ClientHelloMsg *ClientHelloMsg
 }
 
+// TLS parses the ClientHello message on conn and returns
+// a new, unread connection with metadata for virtual host muxing
 func TLS(conn net.Conn) (tlsConn *TLSConn, err error) {
 	c, rd := newShared(conn)
 
