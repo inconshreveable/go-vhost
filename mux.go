@@ -18,7 +18,7 @@ var (
 type (
 	NotFound   error
 	BadRequest error
-	Closed error
+	Closed     error
 
 	// this is the function you apply to a net.Conn to get
 	// a new virtual-host multiplexed connection
@@ -42,11 +42,11 @@ type nameMuxer struct {
 
 func newNameMuxer(listener net.Listener, vhostFn muxFn, muxTimeout time.Duration) (*nameMuxer, error) {
 	mux := &nameMuxer{
-		listener:    listener,
+		listener:   listener,
 		muxTimeout: muxTimeout,
-		vhostFn:     vhostFn,
-		muxErrors:    make(chan muxErr),
-		registry:    make(map[string]*Listener),
+		vhostFn:    vhostFn,
+		muxErrors:  make(chan muxErr),
+		registry:   make(map[string]*Listener),
 	}
 
 	go mux.run()
