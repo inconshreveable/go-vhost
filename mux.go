@@ -10,8 +10,12 @@ import (
 
 var (
 	normalize = strings.ToLower
-	isClosing = func(err error) bool {
-		return !err.(net.Error).Temporary()
+	isClosed = func(err error) bool {
+		netErr, ok := err.(net.Error)
+		if ok {
+			return netErr.Temporary()
+		}
+		return false
 	}
 )
 
@@ -88,7 +92,7 @@ func (m *nameMuxer) run() {
 	for {
 		conn, err := m.listener.Accept()
 		if err != nil {
-			if _, ok := err.(net.Error); ok {
+			if isClosed(err) {
 				m.sendError(nil, Closed(err))
 				return
 			} else {
