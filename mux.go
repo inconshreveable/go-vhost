@@ -35,8 +35,8 @@ type (
 	}
 )
 
-type nameMuxer struct {
-	listener     net.Listener         // the wrapped listener that connections are multiplexed from
+type VhostMuxer struct {
+	listener     net.Listener         // listener on which we mux connections
 	muxTimeout   time.Duration        // a connection fails if it doesn't send enough data to mux after this timeout
 	vhostFn      muxFn                // new connections are multiplexed by applying this function
 	muxErrors    chan muxErr          // all muxing errors are sent over this channel
@@ -44,8 +44,8 @@ type nameMuxer struct {
 	sync.RWMutex                      // protects the registry
 }
 
-func newNameMuxer(listener net.Listener, vhostFn muxFn, muxTimeout time.Duration) (*nameMuxer, error) {
-	mux := &nameMuxer{
+func NewVhostMuxer(listener net.Listener, vhostFn muxFn, muxTimeout time.Duration) (*VhostMuxer, error) {
+	mux := &VhostMuxer{
 		listener:   listener,
 		muxTimeout: muxTimeout,
 		vhostFn:    vhostFn,
@@ -59,7 +59,7 @@ func newNameMuxer(listener net.Listener, vhostFn muxFn, muxTimeout time.Duration
 
 // Listen begins multiplexing the underlying connection to send new
 // connections for the given name over the returned listener.
-func (m *nameMuxer) Listen(name string) (net.Listener, error) {
+func (m *VhostMuxer) Listen(name string) (net.Listener, error) {
 	name = normalize(name)
 
 	vhost := &Listener{
@@ -77,18 +77,18 @@ func (m *nameMuxer) Listen(name string) (net.Listener, error) {
 
 // NextError returns the next error encountered while mux'ing a connection.
 // The net.Conn may be nil if the wrapped listener returned an error from Accept()
-func (m *nameMuxer) NextError() (net.Conn, error) {
+func (m *VhostMuxer) NextError() (net.Conn, error) {
 	muxErr := <-m.muxErrors
 	return muxErr.conn, muxErr.err
 }
 
 // Close closes the underlying listener
-func (m *nameMuxer) Close() {
+func (m *VhostMuxer) Close() {
 	m.listener.Close()
 }
 
-// run is the nameMuxer's main loop for accepting new connections from the wrapped listener
-func (m *nameMuxer) run() {
+// run is the VhostMuxer's main loop for accepting new connections from the wrapped listener
+func (m *VhostMuxer) run() {
 	for {
 		conn, err := m.listener.Accept()
 		if err != nil {
@@ -105,7 +105,7 @@ func (m *nameMuxer) run() {
 }
 
 // handle muxes a connection accepted from the listener
-func (m *nameMuxer) handle(conn net.Conn) {
+func (m *VhostMuxer) handle(conn net.Conn) {
 	defer func() {
 		// recover from failures
 		if r := recover(); r != nil {
@@ -144,18 +144,18 @@ func (m *nameMuxer) handle(conn net.Conn) {
 	l.accept <- vconn
 }
 
-func (m *nameMuxer) sendError(conn net.Conn, err error) {
+func (m *VhostMuxer) sendError(conn net.Conn, err error) {
 	m.muxErrors <- muxErr{conn: conn, err: err}
 }
 
-func (m *nameMuxer) get(name string) (l *Listener, ok bool) {
+func (m *VhostMuxer) get(name string) (l *Listener, ok bool) {
 	m.RLock()
 	defer m.RUnlock()
 	l, ok = m.registry[name]
 	return
 }
 
-func (m *nameMuxer) set(name string, l *Listener) error {
+func (m *VhostMuxer) set(name string, l *Listener) error {
 	m.Lock()
 	defer m.Unlock()
 	if _, exists := m.registry[name]; exists {
@@ -165,7 +165,7 @@ func (m *nameMuxer) set(name string, l *Listener) error {
 	return nil
 }
 
-func (m *nameMuxer) del(name string) {
+func (m *VhostMuxer) del(name string) {
 	m.Lock()
 	defer m.Unlock()
 	delete(m.registry, name)
@@ -192,7 +192,7 @@ Bad Request
 )
 
 type HTTPMuxer struct {
-	*nameMuxer
+	*VhostMuxer
 }
 
 // HandleErrors handles muxing errors by calling .NextError(). You must
@@ -224,12 +224,12 @@ func (m *HTTPMuxer) HandleErrors() {
 // the HTTP Host header in new connections.
 func NewHTTPMuxer(listener net.Listener, muxTimeout time.Duration) (*HTTPMuxer, error) {
 	fn := func(c net.Conn) (Conn, error) { return HTTP(c) }
-	mux, err := newNameMuxer(listener, fn, muxTimeout)
+	mux, err := NewVhostMuxer(listener, fn, muxTimeout)
 	return &HTTPMuxer{mux}, err
 }
 
 type TLSMuxer struct {
-	*nameMuxer
+	*VhostMuxer
 }
 
 // HandleErrors is the default error handler for TLS muxers. At the moment, it simply
@@ -256,7 +256,7 @@ func (m *TLSMuxer) HandleErrors() {
 // NewTLSMuxer begins muxing TLS connections by inspecting the SNI extension.
 func NewTLSMuxer(listener net.Listener, muxTimeout time.Duration) (*TLSMuxer, error) {
 	fn := func(c net.Conn) (Conn, error) { return TLS(c) }
-	mux, err := newNameMuxer(listener, fn, muxTimeout)
+	mux, err := NewVhostMuxer(listener, fn, muxTimeout)
 	return &TLSMuxer{mux}, err
 }
 
@@ -269,7 +269,7 @@ func NewTLSMuxer(listener net.Listener, muxTimeout time.Duration) (*TLSMuxer, er
 // the parent muxer will stop listening for connections to the Listener's name.
 type Listener struct {
 	name   string
-	mux    *nameMuxer
+	mux    *VhostMuxer
 	accept chan Conn
 }
 
