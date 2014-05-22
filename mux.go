@@ -10,7 +10,7 @@ import (
 
 var (
 	normalize = strings.ToLower
-	isClosed = func(err error) bool {
+	isClosed  = func(err error) bool {
 		netErr, ok := err.(net.Error)
 		if ok {
 			return netErr.Temporary()
@@ -19,11 +19,31 @@ var (
 	}
 )
 
-type (
-	NotFound   error
-	BadRequest error
-	Closed     error
+// NotFound is returned when a vhost is not found
+type NotFound struct {
+	err error
+}
 
+// Error returns the error string to implement the error interface
+func (e NotFound) Error() string { return e.Error() }
+
+// BadRequest is returned when extraction of the vhost name fails
+type BadRequest struct {
+	err error
+}
+
+// Error returns the error string to implement the error interface
+func (e BadRequest) Error() string { return e.Error() }
+
+// Closed is returned when the underlying connection is closed
+type Closed struct {
+	err error
+}
+
+// Error returns the error string to implement the error interface
+func (e Closed) Error() string { return e.Error() }
+
+type (
 	// this is the function you apply to a net.Conn to get
 	// a new virtual-host multiplexed connection
 	muxFn func(net.Conn) (Conn, error)
@@ -93,7 +113,7 @@ func (m *VhostMuxer) run() {
 		conn, err := m.listener.Accept()
 		if err != nil {
 			if isClosed(err) {
-				m.sendError(nil, Closed(err))
+				m.sendError(nil, Closed{err})
 				return
 			} else {
 				m.sendError(nil, err)
@@ -122,7 +142,7 @@ func (m *VhostMuxer) handle(conn net.Conn) {
 	// extract the name
 	vconn, err := m.vhostFn(conn)
 	if err != nil {
-		m.sendError(conn, BadRequest(fmt.Errorf("Failed to extract vhost name: %v", err)))
+		m.sendError(conn, BadRequest{fmt.Errorf("Failed to extract vhost name: %v", err)})
 		return
 	}
 
@@ -132,7 +152,7 @@ func (m *VhostMuxer) handle(conn net.Conn) {
 	// look up the correct listener
 	l, ok := m.get(host)
 	if !ok {
-		m.sendError(vconn, NotFound(fmt.Errorf("Host not found: %v", host)))
+		m.sendError(vconn, NotFound{fmt.Errorf("Host not found: %v", host)})
 		return
 	}
 
