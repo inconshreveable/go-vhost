@@ -21,27 +21,27 @@ var (
 
 // NotFound is returned when a vhost is not found
 type NotFound struct {
-	err error
+	msg string
 }
 
 // Error returns the error string to implement the error interface
-func (e NotFound) Error() string { return e.Error() }
+func (e NotFound) Error() string { return e.msg }
 
 // BadRequest is returned when extraction of the vhost name fails
 type BadRequest struct {
-	err error
+	msg string
 }
 
 // Error returns the error string to implement the error interface
-func (e BadRequest) Error() string { return e.Error() }
+func (e BadRequest) Error() string { return e.msg }
 
 // Closed is returned when the underlying connection is closed
 type Closed struct {
-	err error
+	msg string
 }
 
 // Error returns the error string to implement the error interface
-func (e Closed) Error() string { return e.Error() }
+func (e Closed) Error() string { return e.msg }
 
 type (
 	// this is the function you apply to a net.Conn to get
@@ -113,7 +113,7 @@ func (m *VhostMuxer) run() {
 		conn, err := m.listener.Accept()
 		if err != nil {
 			if isClosed(err) {
-				m.sendError(nil, Closed{err})
+				m.sendError(nil, Closed{err.Error()})
 				return
 			} else {
 				m.sendError(nil, err)
@@ -142,7 +142,7 @@ func (m *VhostMuxer) handle(conn net.Conn) {
 	// extract the name
 	vconn, err := m.vhostFn(conn)
 	if err != nil {
-		m.sendError(conn, BadRequest{fmt.Errorf("Failed to extract vhost name: %v", err)})
+		m.sendError(conn, BadRequest{fmt.Sprintf("Failed to extract vhost name: %v", err)})
 		return
 	}
 
@@ -152,7 +152,7 @@ func (m *VhostMuxer) handle(conn net.Conn) {
 	// look up the correct listener
 	l, ok := m.get(host)
 	if !ok {
-		m.sendError(vconn, NotFound{fmt.Errorf("Host not found: %v", host)})
+		m.sendError(vconn, NotFound{fmt.Sprintf("Host not found: %v", host)})
 		return
 	}
 
