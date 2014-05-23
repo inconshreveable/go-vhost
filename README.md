@@ -6,32 +6,48 @@ The lower-level go-vhost interface are just functions which extract the name/rou
 ### [API Documentation](https://godoc.org/github.com/inconshreveable/go-vhost)
 
 ### Usage
+	l, _ := net.Listen("tcp", *listen)
 
-    import vhost "github.com/inconshreveable/go-vhost"
+	// start multiplexing on it
+	mux, _ := vhost.NewHTTPMuxer(l, muxTimeout)
 
-    // listen for connections on a port
-    l, _ := net.Listen(":80")
+	// listen for connections to different domains
+	for _, v := range virtualHosts {
+		vhost := v
 
-    // start multiplexing on it
-    mux, _ := vhost.NewHTTPMuxer(l, muxTimeout)
+		// vhost.Name is a virtual hostname like "foo.example.com"
+		muxListener, _ := mux.Listen(vhost.Name())
 
-    // use the default error handler
-    go mux.HandleErrors()
+		go func(vh virtualHost, ml net.Listener) {
+			for {
+				conn, _ := ml.Accept()
+				go vh.Handle(conn)
+			}
+		}(vhost, muxListener)
+	}
 
-    // listen for connections to different domains
-    for _, v := range virtualHosts {
-	    vhost := v
+	for {
+		conn, err := mux.NextError()
 
-	    // vhost.Name is a virtual hostname like "foo.example.com"
-	    muxListener, _ := mux.Listen(vhost.Name)
+		switch err.(type) {
+		case vhost.BadRequest:
+			log.Printf("got a bad request!")
+			conn.Write([]byte("bad request"))
+		case vhost.NotFound:
+			log.Printf("got a connection for an unknown vhost")
+			conn.Write([]byte("vhost not found"))
+		case vhost.Closed:
+			log.Printf("closed conn: %s", err)
+		default:
+			if conn != nil {
+				conn.Write([]byte("server error"))
+			}
+		}
 
-	    go func() {
-		    for {
-			    conn, _ := muxListener.Accept()
-			    go vhost.Handle(conn)
-		    }
-	    }()
-    }
+		if conn != nil {
+			conn.Close()
+		}
+	}
 
 ### Low-level API usage
 
