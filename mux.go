@@ -21,27 +21,18 @@ var (
 
 // NotFound is returned when a vhost is not found
 type NotFound struct {
-	err error
+	error
 }
-
-// Error returns the error string to implement the error interface
-func (e NotFound) Error() string { return e.Error() }
 
 // BadRequest is returned when extraction of the vhost name fails
 type BadRequest struct {
-	err error
+	error
 }
-
-// Error returns the error string to implement the error interface
-func (e BadRequest) Error() string { return e.Error() }
 
 // Closed is returned when the underlying connection is closed
 type Closed struct {
-	err error
+	error
 }
-
-// Error returns the error string to implement the error interface
-func (e Closed) Error() string { return e.Error() }
 
 type (
 	// this is the function you apply to a net.Conn to get
