@@ -163,6 +163,18 @@ func (m *VhostMuxer) get(name string) (l *Listener, ok bool) {
 	m.RLock()
 	defer m.RUnlock()
 	l, ok = m.registry[name]
+	if !ok {
+		// look for a matching wildcard
+		parts := strings.Split(name, ".")
+		for i := 0; i < len(parts)-1; i++ {
+			parts[i] = "*"
+			name = strings.Join(parts[i:], ".")
+			l, ok = m.registry[name]
+			if ok {
+				break
+			}
+		}
+	}
 	return
 }
 
@@ -170,7 +182,7 @@ func (m *VhostMuxer) set(name string, l *Listener) error {
 	m.Lock()
 	defer m.Unlock()
 	if _, exists := m.registry[name]; exists {
-		return fmt.Errorf("Name %s is already bound", name)
+		return fmt.Errorf("name %s is already bound", name)
 	}
 	m.registry[name] = l
 	return nil
@@ -210,24 +222,26 @@ type HTTPMuxer struct {
 // invoke this function if you do not want to handle the errors yourself.
 func (m *HTTPMuxer) HandleErrors() {
 	for {
-		conn, err := m.NextError()
+		m.HandleError(m.NextError())
+	}
+}
 
-		switch err.(type) {
-		case Closed:
-			return
-		case NotFound:
-			conn.Write([]byte(notFound))
-		case BadRequest:
-			conn.Write([]byte(badRequest))
-		default:
-			if conn != nil {
-				conn.Write([]byte(serverError))
-			}
-		}
-
+func (m *HTTPMuxer) HandleError(conn net.Conn, err error) {
+	switch err.(type) {
+	case Closed:
+		return
+	case NotFound:
+		conn.Write([]byte(notFound))
+	case BadRequest:
+		conn.Write([]byte(badRequest))
+	default:
 		if conn != nil {
-			conn.Close()
+			conn.Write([]byte(serverError))
 		}
+	}
+
+	if conn != nil {
+		conn.Close()
 	}
 }
 
@@ -262,6 +276,15 @@ func (m *TLSMuxer) HandleErrors() {
 			conn.Close()
 		}
 	}
+}
+
+func (m *TLSMuxer) Listen(name string) (net.Listener, error) {
+	// TLS SNI never includes the port
+	host, _, err := net.SplitHostPort(name)
+	if err != nil {
+		host = name
+	}
+	return m.VhostMuxer.Listen(host)
 }
 
 // NewTLSMuxer begins muxing TLS connections by inspecting the SNI extension.
