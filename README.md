@@ -6,7 +6,7 @@ The lower-level go-vhost interface are just functions which extract the name/rou
 ### [API Documentation](https://godoc.org/github.com/inconshreveable/go-vhost)
 
 ### Usage
-```golang
+```go
 l, _ := net.Listen("tcp", *listen)
 
 // start multiplexing on it
@@ -51,7 +51,7 @@ for {
 }
 ```
 ### Low-level API usage
-```golang
+```go
 // accept a new connection
 conn, _ := listener.Accept()
 
@@ -74,7 +74,7 @@ fmt.Printf("%s", bytes)
 
 ### Advanced introspection
 The entire HTTP request headers are available for inspection in case you want to mux on something besides the Host header:
-```golang
+```go
 // parse out the HTTP request and the Host header
 if vhostConn, err = vhost.HTTP(conn); err != nil {
 	panic("Not a valid http connection!")
@@ -85,7 +85,7 @@ customRouting := vhost.Request.Header["X-Custom-Routing-Header"]
 ```
 
 Likewise for TLS, you can look at detailed information about the ClientHello message:
-```golang
+```go
 if vhostConn, err = vhost.TLS(conn); err != nil {
 	panic("Not a valid TLS connection!")
 }
@@ -97,7 +97,7 @@ sessionId := vhost.ClientHelloMsg.SessionId
 ##### Memory reduction with Free
 After you're done muxing, you probably don't need to inspect the header data anymore, so you can make it available for garbage collection:
 
-```golang
+```go
 // look up the upstream host
 upstreamHost := hostMapping[vhostConn.Host()]
 
