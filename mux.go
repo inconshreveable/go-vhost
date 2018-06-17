@@ -1,11 +1,14 @@
 package vhost
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gravitational/trace"
 )
 
 var (
@@ -70,13 +73,16 @@ func NewVhostMuxer(listener net.Listener, vhostFn muxFn, muxTimeout time.Duratio
 
 // Listen begins multiplexing the underlying connection to send new
 // connections for the given name over the returned listener.
-func (m *VhostMuxer) Listen(name string) (net.Listener, error) {
+func (m *VhostMuxer) Listen(name string) (*Listener, error) {
 	name = normalize(name)
 
+	ctx, cancel := context.WithCancel(context.TODO())
 	vhost := &Listener{
-		name:   name,
-		mux:    m,
-		accept: make(chan Conn),
+		name:         name,
+		mux:          m,
+		accept:       make(chan Conn),
+		closeContext: ctx,
+		closeFn:      cancel,
 	}
 
 	if err := m.set(name, vhost); err != nil {
@@ -130,10 +136,17 @@ func (m *VhostMuxer) handle(conn net.Conn) {
 		return
 	}
 
+	resetDeadline := func(conn net.Conn) {
+		if err := conn.SetDeadline(time.Time{}); err != nil {
+			m.sendError(conn, fmt.Errorf("Failed to reset connection deadline: %v", err))
+		}
+	}
+
 	// extract the name
 	vconn, err := m.vhostFn(conn)
 	if err != nil {
 		m.sendError(conn, BadRequest{fmt.Errorf("Failed to extract vhost name: %v", err)})
+		resetDeadline(conn)
 		return
 	}
 
@@ -144,14 +157,11 @@ func (m *VhostMuxer) handle(conn net.Conn) {
 	l, ok := m.get(host)
 	if !ok {
 		m.sendError(vconn, NotFound{fmt.Errorf("Host not found: %v", host)})
+		resetDeadline(vconn)
 		return
 	}
 
-	if err = vconn.SetDeadline(time.Time{}); err != nil {
-		m.sendError(vconn, fmt.Errorf("Failed unset connection deadline: %v", err))
-		return
-	}
-
+	resetDeadline(vconn)
 	l.accept <- vconn
 }
 
@@ -278,7 +288,7 @@ func (m *TLSMuxer) HandleErrors() {
 	}
 }
 
-func (m *TLSMuxer) Listen(name string) (net.Listener, error) {
+func (m *TLSMuxer) Listen(name string) (*Listener, error) {
 	// TLS SNI never includes the port
 	host, _, err := net.SplitHostPort(name)
 	if err != nil {
@@ -302,26 +312,39 @@ func NewTLSMuxer(listener net.Listener, muxTimeout time.Duration) (*TLSMuxer, er
 // connections and Close() it when finished. When you Close() a Listener,
 // the parent muxer will stop listening for connections to the Listener's name.
 type Listener struct {
-	name   string
-	mux    *VhostMuxer
-	accept chan Conn
+	name     string
+	mux      *VhostMuxer
+	accept   chan Conn
+	closeCtx context.Context
+	closeFn  context.CancelFunc
+}
+
+// Push pushes connection to the listener
+func (l *Listener) Push(conn net.Conn) error {
+	select {
+	case <-l.accept:
+		return nil
+	case <-l.closeCtx.Done():
+		return trace.BadParameter("listener is closed")
+	}
 }
 
 // Accept returns the next mux'd connection for this listener and blocks
 // until one is available.
 func (l *Listener) Accept() (net.Conn, error) {
-	conn, ok := <-l.accept
-	if !ok {
-		return nil, fmt.Errorf("Listener closed")
+	select {
+	case conn := <-l.accept:
+		return conn, nil
+	case <-l.closeCtx.Done():
+		return nil, trace.BadParameter("listener is closed")
 	}
-	return conn, nil
 }
 
 // Close stops the parent muxer from listening for connections to the mux'd
 // virtual host name.
 func (l *Listener) Close() error {
+	l.closeFn()
 	l.mux.del(l.name)
-	close(l.accept)
 	return nil
 }
 
