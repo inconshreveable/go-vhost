@@ -89,7 +89,7 @@ func TestHTTPMux(t *testing.T) {
 
 	resp, err = new(http.Client).Do(req)
 	if err != nil {
-		t.Fatalf("failed to make HTTP request", err)
+		t.Fatalf("failed to make HTTP request: %v", err)
 	}
 
 	body, err := ioutil.ReadAll(resp.Body)
