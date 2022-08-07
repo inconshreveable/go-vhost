@@ -129,6 +129,11 @@ func (m *VhostMuxer) handle(conn net.Conn) {
 		m.sendError(conn, fmt.Errorf("Failed to set deadline: %v", err))
 		return
 	}
+	defer func() {
+		if err := conn.SetDeadline(time.Time{}); err != nil {
+			m.sendError(conn, fmt.Errorf("Failed unset connection deadline: %v", err))
+		}
+	}()
 
 	// extract the name
 	vconn, err := m.vhostFn(conn)
@@ -144,11 +149,6 @@ func (m *VhostMuxer) handle(conn net.Conn) {
 	l, ok := m.get(host)
 	if !ok {
 		m.sendError(vconn, NotFound{fmt.Errorf("Host not found: %v", host)})
-		return
-	}
-
-	if err = vconn.SetDeadline(time.Time{}); err != nil {
-		m.sendError(vconn, fmt.Errorf("Failed unset connection deadline: %v", err))
 		return
 	}
 
