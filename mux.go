@@ -34,6 +34,11 @@ type Closed struct {
 	error
 }
 
+// AlreadyBound is returned when the a vhost is already bound.
+type AlreadyBound struct {
+	error
+}
+
 type (
 	// this is the function you apply to a net.Conn to get
 	// a new virtual-host multiplexed connection
@@ -182,7 +187,7 @@ func (m *VhostMuxer) set(name string, l *Listener) error {
 	m.Lock()
 	defer m.Unlock()
 	if _, exists := m.registry[name]; exists {
-		return fmt.Errorf("name %s is already bound", name)
+		return AlreadyBound{fmt.Errorf("name %s is already bound", name)}
 	}
 	m.registry[name] = l
 	return nil
@@ -232,7 +237,7 @@ func (m *HTTPMuxer) HandleError(conn net.Conn, err error) {
 		return
 	case NotFound:
 		conn.Write([]byte(notFound))
-	case BadRequest:
+	case BadRequest, AlreadyBound:
 		conn.Write([]byte(badRequest))
 	default:
 		if conn != nil {

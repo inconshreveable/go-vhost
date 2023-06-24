@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-
 	"testing"
 	"time"
 )
@@ -17,14 +16,12 @@ import (
 func TestErrors(t *testing.T) {
 	// test case for https://github.com/inconshreveable/go-vhost/pull/2
 	// create local err vars of error interface type
-	var notFoundErr error
-	var badRequestErr error
-	var closedErr error
-
-	// stuff local error types in to interface values
-	notFoundErr = NotFound{fmt.Errorf("test NotFound")}
-	badRequestErr = BadRequest{fmt.Errorf("test BadRequest")}
-	closedErr = Closed{fmt.Errorf("test Closed")}
+	var (
+		notFoundErr     error = NotFound{fmt.Errorf("test NotFound")}
+		badRequestErr   error = BadRequest{fmt.Errorf("test BadRequest")}
+		closedErr       error = Closed{fmt.Errorf("test Closed")}
+		alreadyBoundErr error = AlreadyBound{fmt.Errorf("test AlreadyBound")}
+	)
 
 	// assert the types
 	switch errType := notFoundErr.(type) {
@@ -41,6 +38,11 @@ func TestErrors(t *testing.T) {
 	case Closed:
 	default:
 		t.Fatalf("expected Closed, got: %s", errType)
+	}
+	switch errType := alreadyBoundErr.(type) {
+	case AlreadyBound:
+	default:
+		t.Fatalf("expected AlreadyBound, got: %s", errType)
 	}
 }
 
@@ -193,3 +195,67 @@ func (l fakeListener) Accept() (net.Conn, error) {
 }
 func (fakeListener) Addr() net.Addr { return nil }
 func (fakeListener) Close() error   { return nil }
+
+func TestVhostMuxer_set(t *testing.T) {
+	type fields struct {
+		registry map[string]*Listener
+	}
+	type args struct {
+		name string
+		l    *Listener
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			"adding a single vhost",
+			fields{
+				registry: make(map[string]*Listener),
+			},
+			args{
+				name: "example.com",
+				l:    &Listener{},
+			},
+			false,
+		},
+		{
+			"adding a different vhost",
+			fields{
+				registry: map[string]*Listener{
+					"example.com": {},
+				},
+			},
+			args{
+				name: "foobar.com",
+				l:    &Listener{},
+			},
+			false,
+		},
+		{
+			"adding same vhost",
+			fields{
+				registry: map[string]*Listener{
+					"example.com": {},
+				},
+			},
+			args{
+				name: "example.com",
+				l:    &Listener{},
+			},
+			true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &VhostMuxer{
+				registry: tt.fields.registry,
+			}
+			if err := m.set(tt.args.name, tt.args.l); (err != nil) != tt.wantErr {
+				t.Errorf("VhostMuxer.set() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
