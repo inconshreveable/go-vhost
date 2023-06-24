@@ -237,8 +237,10 @@ func (m *HTTPMuxer) HandleError(conn net.Conn, err error) {
 		return
 	case NotFound:
 		conn.Write([]byte(notFound))
-	case BadRequest, AlreadyBound:
+	case BadRequest:
 		conn.Write([]byte(badRequest))
+	// AlreadyBound is not handled here by design, as its origin is different,
+	// and it will never make it here.
 	default:
 		if conn != nil {
 			conn.Write([]byte(serverError))
